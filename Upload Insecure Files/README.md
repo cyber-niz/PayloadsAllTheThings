@@ -46,7 +46,7 @@ Double extensions
 ### Other extensions
 
 ```powershell
-asp : .asp, .aspx
+asp : .asp, .aspx, .cer and .asa (IIS <= 7.5), shell.aspx;1.jpg (IIS < 7.0)
 perl: .pl, .pm, .cgi, .lib
 jsp : .jsp, .jspx, .jsw, .jsv, .jspf
 Coldfusion: .cfm, .cfml, .cfc, .dbm
@@ -65,6 +65,9 @@ Coldfusion: .cfm, .cfml, .cfc, .dbm
     * `Content-Type : image/gif`
     * `Content-Type : image/png`
     * `Content-Type : image/jpeg`
+- [Magic Bytes](https://en.wikipedia.org/wiki/List_of_file_signatures)
+    
+    Sometimes applications identify file types based on their first signature bytes. Adding/replacing them in a file might trick the application.
 
 ### Picture upload with LFI
 

