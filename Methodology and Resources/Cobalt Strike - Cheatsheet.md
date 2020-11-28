@@ -102,10 +102,44 @@ Configuration:
 3. Interact with a beacon, and `sleep 0`
 
 
-### SMB Beacon
+### SMB Beacon   
 
-Uses Named Pipes.    
-Connect to an SMB Beacon : `link [host] [pipe]`
+```powershell
+link [host] [pipename]
+connect [host] [port]
+unlink [host] [PID]
+jump [exec] [host] [pipe]
+```
+
+SMB Beacon uses Named Pipes. You might encounter these error code while running it.
+
+| Error Code | Meaning              | Description                                        |
+|------------|----------------------|----------------------------------------------------|
+| 2          | File Not Found       | There is no beacon for you to link to              |
+| 5          | Access is denied     | Invalid credentials or you don't have permission   |
+| 53         | Bad Netpath          | You have no trust relationship with the target system. It may or may not be a beacon there. |
+
+
+### SSH Beacon
+
+```powershell
+# deploy a beacon
+beacon> help ssh
+Use: ssh [target:port] [user] [pass]
+Spawn an SSH client and attempt to login to the specified target
+
+beacon> help ssh-key
+Use: ssh [target:port] [user] [/path/to/key.pem]
+Spawn an SSH client and attempt to login to the specified target
+
+# beacon's commands
+upload                    Upload a file
+download                  Download a file
+socks                     Start SOCKS4a server to relay traffic
+sudo                      Run a command via sudo
+rportfwd                  Setup a reverse port forward
+shell                     Execute a command via the shell
+```
 
 ### Metasploit compatibility
 
@@ -279,6 +313,19 @@ beacon > execute-assembly /home/audit/Rubeus.exe
 
 ## Lateral Movement
 
+- **portscan:** Performs a portscan on a spesific target.
+- **runas:** A wrapper of runas.exe, using credentials you can run a command as another user.
+- **pth:** By providing a username and a NTLM hash you can perform a Pass The Hash attack and inject a TGT on the current process. \
+:exclamation: This module needs Administrator privileges.
+- **steal_token:** Steal a token from a specified process.
+- **make_token:** By providing credentials you can create an impersonation token into the current process and execute commands from the context of the impersonated user.
+- **jump:** Provides easy and quick way to move lateraly using winrm or psexec to spawn a new beacon session on a target. \
+:exclamation: The **jump** module will use the current delegation/impersonation token to authenticate on the remote target. \
+:muscle: We can combine the **jump** module with the **make_token** or **pth** module for a quick "jump" to another target on the network.
+- **remote-exec:** Execute a command on a remote target using psexec, winrm or wmi. \
+:exclamation: The **remote-exec** module will use the current delegation/impersonation token to authenticate on the remote target.
+- **ssh/ssh-key:** Authenticate using ssh with password or private key. Works for both linux and windows hosts.
+
 :warning: All the commands launch powershell.exe
 
 ```powershell
@@ -385,7 +432,8 @@ Beacon Command Elevators
 
 Artifact Kit (Cobalt Strike 4.0) - https://www.youtube.com/watch?v=6mC21kviwG4 :
 
-- `sudo apt-get install mingw-w64`
+- Download the artifact kit : `Go to Help -> Arsenal to download Artifact Kit (requires a licensed version of Cobalt Strike)`
+- Install the dependencies : `sudo apt-get install mingw-w64`
 - Edit the Artifact code
     * Change pipename strings
     * Change `VirtualAlloc` in `patch.c`/`patch.exe`, e.g: HeapAlloc
